@@ -1,0 +1,11 @@
+.{
+    .name = .zig_dll_example,
+    .version = "0.0.0",
+    .fingerprint = 0x47631b30b66cf1ca,
+    .minimum_zig_version = "0.14.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
