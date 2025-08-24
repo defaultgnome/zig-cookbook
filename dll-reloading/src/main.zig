@@ -9,7 +9,7 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    var lib = try DynAPI.init(allocator, "zig-out/lib/libhot_dll");
+    var lib = try DynAPI.init(allocator);
     defer lib.deinit();
 
     var buffer: [10]u8 = undefined;
@@ -57,6 +57,8 @@ pub fn main() !void {
 }
 
 const DynAPI = struct {
+    const API = @import("dll_api.zig").API;
+    const dll_name = @import("build_options").dll_name;
     const Self = @This();
 
     allocator: std.mem.Allocator,
@@ -64,17 +66,22 @@ const DynAPI = struct {
     lib: ?std.DynLib = null,
     api: ?*const API = null,
 
-    const API = extern struct {
-        add: *const fn (i32, i32) callconv(.C) i32,
-        multiply: *const fn (i32, i32) callconv(.C) i32,
-        greet: *const fn ([*:0]const u8) callconv(.C) void,
-    };
+    pub fn init(allocator: std.mem.Allocator) !Self {
+        const exe_dir = std.fs.selfExeDirPathAlloc(allocator) catch {
+            std.log.err("Failed to get executable directory", .{});
+            return error.ExecutableDirectoryNotFound;
+        };
+        defer allocator.free(exe_dir);
+        const lib_path = std.fs.path.join(allocator, &[_][]const u8{ exe_dir, dll_name }) catch {
+            std.log.err("Failed to get library path of: {s} {s}", .{ exe_dir, dll_name });
+            return error.LibraryPathNotFound;
+        };
+        defer allocator.free(lib_path);
 
-    pub fn init(allocator: std.mem.Allocator, path: []const u8) !Self {
         const pathWithExt = try std.fmt.allocPrint(
             allocator,
             "{s}{s}",
-            .{ path, std.Target.dynamicLibSuffix(builtin.target) },
+            .{ lib_path, std.Target.dynamicLibSuffix(builtin.target) },
         );
         var self = Self{
             .allocator = allocator,

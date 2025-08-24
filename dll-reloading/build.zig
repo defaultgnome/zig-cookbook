@@ -4,21 +4,30 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // TODO: inject the final name `zig-out/lib/libhot_dll` into builtin of the app
     const dll = b.addSharedLibrary(.{
-        .name = "hot_dll",
+        .name = "mydll",
         .root_source_file = b.path("src/dll.zig"),
         .target = target,
         .optimize = optimize,
     });
+    const dll_name = if (target.result.os.tag.isDarwin()) dll.install_name.? else dll.name;
     b.installArtifact(dll);
 
-    const exe = b.addExecutable(.{
-        .name = "hot_reload_demo",
+    const exe_mod = b.addModule("exe_mod", .{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    const options = b.addOptions();
+    options.addOption([]const u8, "dll_name", dll_name);
+    exe_mod.addOptions("build_options", options);
+
+    const exe = b.addExecutable(.{
+        .name = "hot_reload_demo",
+        .root_module = exe_mod,
+    });
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
