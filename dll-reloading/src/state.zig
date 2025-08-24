@@ -1,3 +1,3 @@
-pub const State = struct {
+pub const State = extern struct {
     a_number: i32 = 0,
 };
