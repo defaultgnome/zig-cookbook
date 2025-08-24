@@ -1,5 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const State = @import("state.zig").State;
+
+var state: State = .{};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -16,15 +19,22 @@ pub fn main() !void {
 
     // Main loop
     while (true) {
-        try stdout.writeAll("\n1. Print message from DLL\n2. Reload DLL\n3. Unload\n4. Quit\nChoice: ");
+        try stdout.writeAll("\n0. Increment state\n1. Print message from DLL\n2. Reload DLL\n3. Unload\n4. Quit\nChoice: ");
 
         if (try stdin.readUntilDelimiterOrEof(buffer[0..], '\n')) |user_input| {
             const choice = std.fmt.parseInt(u8, std.mem.trim(u8, user_input, &std.ascii.whitespace), 10) catch {
-                try stdout.writeAll("Invalid choice. Please enter 1, 2, 3 or 4.\n");
+                try stdout.writeAll("Invalid choice. Please enter 0, 1, 2, 3 or 4.\n");
                 continue;
             };
 
             switch (choice) {
+                0 => {
+                    if (lib.api) |api| {
+                        try stdout.print("State before: {d}\n", .{state.a_number});
+                        api.increment(&state);
+                        try stdout.print("State after: {d}\n", .{state.a_number});
+                    }
+                },
                 1 => {
                     if (lib.api) |api| {
                         api.greet("Boss");
@@ -56,6 +66,7 @@ pub fn main() !void {
     }
 }
 
+// TODO: handle live code reloading - as of now we need to unload to unlock the dll so the compiler can recompile the dll, only then we can load the new dll
 const DynAPI = struct {
     const API = @import("dll_api.zig").API;
     const dll_name = @import("build_options").dll_name;

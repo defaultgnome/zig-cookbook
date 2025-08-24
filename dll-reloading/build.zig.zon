@@ -1,7 +1,7 @@
 .{
-    .name = .zig_dll_example,
+    .name = .dll_reloading,
     .version = "0.0.0",
-    .fingerprint = 0x47631b30b66cf1ca,
+    .fingerprint = 0x72e5acbfaf47dd4d,
     .minimum_zig_version = "0.14.0",
     .paths = .{
         "build.zig",
