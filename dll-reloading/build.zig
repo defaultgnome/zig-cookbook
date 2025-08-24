@@ -4,6 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // TODO: inject the final name `zig-out/lib/libhot_dll` into builtin of the app
     const dll = b.addSharedLibrary(.{
         .name = "hot_dll",
         .root_source_file = b.path("src/dll.zig"),
