@@ -19,47 +19,41 @@ pub fn main() !void {
 
     // Main loop
     while (true) {
-        try stdout.writeAll("\n0. Increment state\n1. Print message from DLL\n2. Reload DLL\n3. Unload\n4. Quit\nChoice: ");
+        try stdout.writeAll("\x1B[2J\x1B[H");
+
+        if (try lib.reload()) {
+            try stdout.writeAll("DLL reloaded successfully.\n");
+        }
+        if (lib.api) |api| {
+            api.greet("Boss");
+        } else {
+            try stdout.writeAll("Error: DLL function not loaded.\n");
+        }
+
+        try stdout.print("State : {d}\n", .{state.a_number});
+
+        try stdout.writeAll("\n\t1. Increment state\n");
+        try stdout.writeAll("\t0. Quit\n");
+        try stdout.writeAll("Choice: ");
 
         if (try stdin.readUntilDelimiterOrEof(buffer[0..], '\n')) |user_input| {
             const choice = std.fmt.parseInt(u8, std.mem.trim(u8, user_input, &std.ascii.whitespace), 10) catch {
-                try stdout.writeAll("Invalid choice. Please enter 0, 1, 2, 3 or 4.\n");
+                try stdout.writeAll("Invalid choice.\n");
                 continue;
             };
 
             switch (choice) {
                 0 => {
-                    if (lib.api) |api| {
-                        try stdout.print("State before: {d}\n", .{state.a_number});
-                        api.increment(&state);
-                        try stdout.print("State after: {d}\n", .{state.a_number});
-                    }
-                },
-                1 => {
-                    if (lib.api) |api| {
-                        api.greet("Boss");
-                    } else {
-                        try stdout.writeAll("Error: DLL function not loaded.\n");
-                    }
-
-                    try stdout.print("API::get::5+3={d}\n", .{lib.add(5, 3)});
-                },
-                2 => {
-                    try stdout.writeAll("Reloading DLL...\n");
-                    try lib.reload();
-                    try stdout.writeAll("DLL reloaded successfully.\n");
-                },
-                3 => {
-                    try stdout.writeAll("Unloading DLL...\n");
-                    try lib.unload();
-                    try stdout.writeAll("DLL unloaded successfully.\n");
-                },
-                4 => {
                     try stdout.writeAll("Exiting...\n");
                     return;
                 },
+                1 => {
+                    if (lib.api) |api| {
+                        api.increment(&state);
+                    }
+                },
                 else => {
-                    try stdout.writeAll("Invalid choice. Please enter 1, 2, or 3.\n");
+                    try stdout.writeAll("Invalid choice.\n");
                 },
             }
         }
@@ -187,9 +181,11 @@ const DynAPI = struct {
         self.api = null;
     }
 
-    pub fn reload(self: *Self) !void {
+    pub fn reload(self: *Self) !bool {
+        // TODO: check if dll file timestamp is diff than last_loaded_lib_timestamp
         try self.unload();
         try self.load();
+        return true;
     }
 
     pub fn deinit(self: *Self) void {
