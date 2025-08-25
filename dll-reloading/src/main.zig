@@ -12,8 +12,12 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    var lib = try DynAPI.init(allocator, .{});
+    var lib = try DynAPI.init(allocator);
     defer lib.deinit();
+    try lib.load();
+    defer lib.unload() catch {
+        std.log.warn("Failed to unload library at: {s}", .{lib.lib_path_working_copy orelse "null"});
+    };
 
     var buffer: [10]u8 = undefined;
 
@@ -66,20 +70,13 @@ const DynAPI = struct {
     const Self = @This();
 
     allocator: std.mem.Allocator,
-    lib_path: []const u8,
-    lib_tmp_path: []const u8,
+    lib_path_original: []const u8,
+    lib_path_working_copy: ?[]const u8,
     last_loaded_lib_timestamp: i128,
     lib: ?std.DynLib = null,
     api: ?*const API = null,
-    options: Options,
 
-    const Options = struct {
-        /// If true, the library will be loaded into a temporary copy of the dll
-        /// enabling automatic hot reloading
-        load_into_temp: bool = true,
-    };
-
-    pub fn init(allocator: std.mem.Allocator, options: Options) !Self {
+    pub fn init(allocator: std.mem.Allocator) !Self {
         const exe_dir = std.fs.selfExeDirPathAlloc(allocator) catch {
             std.log.err("Failed to get executable directory", .{});
             return error.ExecutableDirectoryNotFound;
@@ -90,50 +87,52 @@ const DynAPI = struct {
             return error.LibraryPathNotFound;
         };
 
-        const lib_tmp_path = try allocator.dupe(u8, lib_path);
-
-        var self = Self{
+        const self = Self{
             .allocator = allocator,
-            .lib_path = lib_path,
-            .lib_tmp_path = lib_tmp_path,
+            .lib_path_original = lib_path,
+            .lib_path_working_copy = null,
             .last_loaded_lib_timestamp = 0,
-            .options = options,
         };
-        try self.load();
         return self;
     }
 
-    pub fn load(self: *Self) !void {
-        if (self.options.load_into_temp and self.lib != null) {
-            try self.createTempCopy();
+    pub fn deinit(self: *Self) void {
+        self.allocator.free(self.lib_path_original);
+        if (self.lib_path_working_copy) |path| {
+            self.allocator.free(path);
         }
+    }
 
-        var lib = std.DynLib.open(self.lib_tmp_path) catch |err| {
-            std.log.err("Failed to load library: {}", .{err});
-            return error.LibraryLoadFailed;
-        };
+    pub fn load(self: *Self) !void {
+        try self.createTempCopy();
+        try self.loadTempLib();
+    }
+
+    fn loadTempLib(self: *Self) !void {
+        const lib_to_load = self.lib_path_working_copy orelse self.lib_path_original;
+        var lib = try std.DynLib.open(lib_to_load);
 
         self.last_loaded_lib_timestamp = try self.getLibTimestamp();
 
         self.api = lib.lookup(*const API, "api") orelse {
-            std.log.err("Failed to find 'api' symbol", .{});
             return error.SymbolNotFound;
         };
         self.lib = lib;
     }
 
     fn getLibTimestamp(self: *Self) !i128 {
-        const file = try std.fs.openFileAbsolute(self.lib_path, .{});
+        const file = try std.fs.openFileAbsolute(self.lib_path_original, .{});
         defer file.close();
         const file_stat = try file.stat();
         return file_stat.mtime;
     }
 
+    /// Can't be called twice in  a row,
+    /// must delete the previous temp file
     fn createTempCopy(self: *Self) !void {
-        std.debug.assert(self.lib == null); // must be unloaded first
-
+        std.debug.assert(self.lib_path_working_copy == null);
         const timestamp = std.time.timestamp();
-        const lib_basename = std.fs.path.basename(self.lib_path);
+        const lib_basename = std.fs.path.basename(self.lib_path_original);
         const tmp_basename = try std.fmt.allocPrint(
             self.allocator,
             "{d}_{s}",
@@ -143,25 +142,21 @@ const DynAPI = struct {
 
         var dir = try self.getLibDir();
         defer dir.close();
-        try dir.copyFile(self.lib_path, dir, tmp_basename, .{});
-
-        try self.deleteTempIfExist();
-
-        const old_path = self.lib_tmp_path;
-        defer self.allocator.free(old_path);
+        try dir.copyFile(self.lib_path_original, dir, tmp_basename, .{});
         const new_path = try dir.realpathAlloc(self.allocator, tmp_basename);
-        self.lib_tmp_path = new_path;
+        self.lib_path_working_copy = new_path;
     }
 
     fn deleteTempIfExist(self: *Self) !void {
-        if (!std.mem.eql(u8, self.lib_tmp_path, self.lib_path)) {
-            // if not equal mean we created a temp file, so we should delete it
-            try std.fs.deleteFileAbsolute(self.lib_tmp_path);
+        if (self.lib_path_working_copy) |path| {
+            try std.fs.deleteFileAbsolute(path);
+            self.allocator.free(path);
+            self.lib_path_working_copy = null;
         }
     }
 
     fn getLibDir(self: Self) !std.fs.Dir {
-        const maybe_lib_dir = std.fs.path.dirname(self.lib_path);
+        const maybe_lib_dir = std.fs.path.dirname(self.lib_path_original);
         const dir = dir: {
             if (maybe_lib_dir) |dir_path| {
                 break :dir try std.fs.cwd().openDir(dir_path, .{});
@@ -192,14 +187,6 @@ const DynAPI = struct {
         try self.unload();
         try self.load();
         return true;
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.unload() catch {
-            std.log.warn("Failed to unload library at: {s}", .{self.lib_tmp_path});
-        };
-        self.allocator.free(self.lib_path);
-        self.allocator.free(self.lib_tmp_path);
     }
 
     // Can do higher level wrapper here

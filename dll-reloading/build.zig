@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) !void {
     // TODO: see what is the best way to handle that
     // in macos the lib in in lib/ and not bin/ on windows its in the bin/
     // what about the end release? it will probably be in the same dir no?
-    const dll_name = if (target.result.os.tag.isDarwin()) try std.fs.path.join(b.allocator, &.{ "..", "lib", dll.out_lib_filename }) else dll.out_lib_filename;
+    const dll_name = if (target.result.os.tag.isDarwin()) try std.fs.path.join(b.allocator, &.{ "..", "lib", dll.out_filename }) else dll.out_filename;
     b.installArtifact(dll);
 
     const exe_mod = b.addModule("exe_mod", .{
