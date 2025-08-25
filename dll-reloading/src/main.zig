@@ -60,7 +60,6 @@ pub fn main() !void {
     }
 }
 
-// TODO: handle live code reloading - as of now we need to unload to unlock the dll so the compiler can recompile the dll, only then we can load the new dll
 const DynAPI = struct {
     const API = @import("dll_api.zig").API;
     const dll_name = @import("build_options").dll_name;
@@ -69,7 +68,7 @@ const DynAPI = struct {
     allocator: std.mem.Allocator,
     lib_path: []const u8,
     lib_tmp_path: []const u8,
-    last_loaded_lib_timestamp: u32,
+    last_loaded_lib_timestamp: i128,
     lib: ?std.DynLib = null,
     api: ?*const API = null,
     options: Options,
@@ -104,10 +103,6 @@ const DynAPI = struct {
         return self;
     }
 
-    // fn isDllFileBeenChanged(self: Self) bool {
-    // TODO: check if dll file timestamp is diff than last_loaded
-    // }
-
     pub fn load(self: *Self) !void {
         if (self.options.load_into_temp and self.lib != null) {
             try self.createTempCopy();
@@ -118,13 +113,20 @@ const DynAPI = struct {
             return error.LibraryLoadFailed;
         };
 
-        // TODO: update self.last_loaded_lib_timestamp
+        self.last_loaded_lib_timestamp = try self.getLibTimestamp();
 
         self.api = lib.lookup(*const API, "api") orelse {
             std.log.err("Failed to find 'api' symbol", .{});
             return error.SymbolNotFound;
         };
         self.lib = lib;
+    }
+
+    fn getLibTimestamp(self: *Self) !i128 {
+        const file = try std.fs.openFileAbsolute(self.lib_path, .{});
+        defer file.close();
+        const file_stat = try file.stat();
+        return file_stat.mtime;
     }
 
     fn createTempCopy(self: *Self) !void {
@@ -182,7 +184,11 @@ const DynAPI = struct {
     }
 
     pub fn reload(self: *Self) !bool {
-        // TODO: check if dll file timestamp is diff than last_loaded_lib_timestamp
+        const lib_timestamp = try self.getLibTimestamp();
+        if (lib_timestamp == self.last_loaded_lib_timestamp) {
+            return false;
+        }
+
         try self.unload();
         try self.load();
         return true;
@@ -196,7 +202,7 @@ const DynAPI = struct {
         self.allocator.free(self.lib_tmp_path);
     }
 
-    // Can do higher wrapper for safer cases
+    // Can do higher level wrapper here
     pub fn add(self: *Self, a: i32, b: i32) i32 {
         if (self.api) |api| {
             return api.add(a, b);
