@@ -7,7 +7,7 @@ fn add(a: i32, b: i32) callconv(.C) i32 {
 }
 
 fn increment(state: *State) callconv(.C) void {
-    state.a_number += 5;
+    state.a_number += 1;
 }
 
 fn greet(name: [*:0]const u8) callconv(.C) void {

@@ -12,7 +12,7 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    var lib = try DynAPI.init(allocator);
+    var lib = try DynAPI.init(allocator, .{});
     defer lib.deinit();
 
     var buffer: [10]u8 = undefined;
@@ -51,7 +51,7 @@ pub fn main() !void {
                 },
                 3 => {
                     try stdout.writeAll("Unloading DLL...\n");
-                    lib.unload();
+                    try lib.unload();
                     try stdout.writeAll("DLL unloaded successfully.\n");
                 },
                 4 => {
@@ -73,11 +73,20 @@ const DynAPI = struct {
     const Self = @This();
 
     allocator: std.mem.Allocator,
-    path: []const u8,
+    lib_path: []const u8,
+    lib_tmp_path: []const u8,
+    last_loaded_lib_timestamp: u32,
     lib: ?std.DynLib = null,
     api: ?*const API = null,
+    options: Options,
 
-    pub fn init(allocator: std.mem.Allocator) !Self {
+    const Options = struct {
+        /// If true, the library will be loaded into a temporary copy of the dll
+        /// enabling automatic hot reloading
+        load_into_temp: bool = true,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, options: Options) !Self {
         const exe_dir = std.fs.selfExeDirPathAlloc(allocator) catch {
             std.log.err("Failed to get executable directory", .{});
             return error.ExecutableDirectoryNotFound;
@@ -87,26 +96,35 @@ const DynAPI = struct {
             std.log.err("Failed to get library path of: {s} {s}", .{ exe_dir, dll_name });
             return error.LibraryPathNotFound;
         };
-        defer allocator.free(lib_path);
 
-        const pathWithExt = try std.fmt.allocPrint(
-            allocator,
-            "{s}{s}",
-            .{ lib_path, std.Target.dynamicLibSuffix(builtin.target) },
-        );
+        const lib_tmp_path = try allocator.dupe(u8, lib_path);
+
         var self = Self{
             .allocator = allocator,
-            .path = pathWithExt,
+            .lib_path = lib_path,
+            .lib_tmp_path = lib_tmp_path,
+            .last_loaded_lib_timestamp = 0,
+            .options = options,
         };
         try self.load();
         return self;
     }
 
-    fn load(self: *Self) !void {
-        var lib = std.DynLib.open(self.path) catch |err| {
+    // fn isDllFileBeenChanged(self: Self) bool {
+    // TODO: check if dll file timestamp is diff than last_loaded
+    // }
+
+    pub fn load(self: *Self) !void {
+        if (self.options.load_into_temp and self.lib != null) {
+            try self.createTempCopy();
+        }
+
+        var lib = std.DynLib.open(self.lib_tmp_path) catch |err| {
             std.log.err("Failed to load library: {}", .{err});
             return error.LibraryLoadFailed;
         };
+
+        // TODO: update self.last_loaded_lib_timestamp
 
         self.api = lib.lookup(*const API, "api") orelse {
             std.log.err("Failed to find 'api' symbol", .{});
@@ -115,24 +133,71 @@ const DynAPI = struct {
         self.lib = lib;
     }
 
-    pub fn unload(self: *Self) void {
+    fn createTempCopy(self: *Self) !void {
+        std.debug.assert(self.lib == null); // must be unloaded first
+
+        const timestamp = std.time.timestamp();
+        const lib_basename = std.fs.path.basename(self.lib_path);
+        const tmp_basename = try std.fmt.allocPrint(
+            self.allocator,
+            "{d}_{s}",
+            .{ timestamp, lib_basename },
+        );
+        defer self.allocator.free(tmp_basename);
+
+        var dir = try self.getLibDir();
+        defer dir.close();
+        try dir.copyFile(self.lib_path, dir, tmp_basename, .{});
+
+        try self.deleteTempIfExist();
+
+        const old_path = self.lib_tmp_path;
+        defer self.allocator.free(old_path);
+        const new_path = try dir.realpathAlloc(self.allocator, tmp_basename);
+        self.lib_tmp_path = new_path;
+    }
+
+    fn deleteTempIfExist(self: *Self) !void {
+        if (!std.mem.eql(u8, self.lib_tmp_path, self.lib_path)) {
+            // if not equal mean we created a temp file, so we should delete it
+            try std.fs.deleteFileAbsolute(self.lib_tmp_path);
+        }
+    }
+
+    fn getLibDir(self: Self) !std.fs.Dir {
+        const maybe_lib_dir = std.fs.path.dirname(self.lib_path);
+        const dir = dir: {
+            if (maybe_lib_dir) |dir_path| {
+                break :dir try std.fs.cwd().openDir(dir_path, .{});
+            } else {
+                break :dir std.fs.cwd();
+            }
+        };
+        return dir;
+    }
+
+    pub fn unload(self: *Self) !void {
         if (self.lib) |*lib| {
             lib.close();
         }
+
+        try self.deleteTempIfExist();
+
         self.lib = null;
         self.api = null;
     }
 
     pub fn reload(self: *Self) !void {
-        self.unload();
+        try self.unload();
         try self.load();
     }
 
     pub fn deinit(self: *Self) void {
-        if (self.lib) |*lib| {
-            lib.close();
-        }
-        self.allocator.free(self.path);
+        self.unload() catch {
+            std.log.warn("Failed to unload library at: {s}", .{self.lib_tmp_path});
+        };
+        self.allocator.free(self.lib_path);
+        self.allocator.free(self.lib_tmp_path);
     }
 
     // Can do higher wrapper for safer cases
