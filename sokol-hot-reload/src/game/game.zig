@@ -6,7 +6,10 @@ pub fn init(state: *State) void {
 }
 
 pub fn update(state: *State) void {
-    state.data += 1;
+    if (state.data >= std.math.maxInt(@TypeOf(state.data)) / 2) {
+        state.data = 1;
+    }
+    state.data *= 2;
 }
 
 pub fn cleanup(state: *State) void {

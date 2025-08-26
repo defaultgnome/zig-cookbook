@@ -13,8 +13,8 @@
             .hash = "zmath-0.11.0-dev-wjwivdErAwA9JvOksjectxgnDUZumDR1V9DwKy5UeTOT",
         },
         .stdx = .{
-            .url = "git+https://github.com/defaultgnome/stdx#e2a58a63c8904b50d96f74de28675a05006715d1",
-            .hash = "stdx-0.1.0-1MzsKtw3AABAQcqd0f-ENH60OyDNfQQXN55rBZJa1iOc",
+            .url = "git+https://github.com/defaultgnome/stdx#641f77658b769e53cd5d6c64106381130bb71f49",
+            .hash = "stdx-0.1.1-1MzsKgg4AABfZQKVd31KYgcdetBi7x34e1iPiI8kJmai",
         },
     },
     .paths = .{
