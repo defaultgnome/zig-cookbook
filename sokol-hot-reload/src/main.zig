@@ -106,8 +106,12 @@ export fn init() void {
 }
 
 export fn frame() void {
-    if (game_api.reload() catch false) {
-        std.log.debug("Reloaded game dll", .{});
+    if (IS_DEV) {
+        const has_reloaded = game_api.reload() catch false;
+        if (has_reloaded) {
+            // TODO: trigger a reload game_api.reload - it should rebuild shaders etc..
+            std.log.debug("Reloaded game dll", .{});
+        }
     }
     // UPDATE
     if (game_api.api) |api| {
