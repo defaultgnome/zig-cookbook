@@ -5,6 +5,10 @@ const sokol = @import("sokol");
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const is_dev_mode = optimize == .Debug;
+
+    const engine_options = b.addOptions();
+    engine_options.addOption(bool, "is_dev_mode", is_dev_mode);
 
     // DEPS
     const stdx_dep = b.dependency("stdx", .{
@@ -15,7 +19,7 @@ pub fn build(b: *std.Build) !void {
     const sokol_dep = b.dependency("sokol", .{
         .target = target,
         .optimize = optimize,
-        .dynamic_linkage = true,
+        .dynamic_linkage = is_dev_mode,
     });
 
     b.installArtifact(sokol_dep.artifact("sokol_clib"));
@@ -33,36 +37,38 @@ pub fn build(b: *std.Build) !void {
             .metal_macos = true,
         },
     });
+    if (is_dev_mode) {
+        try b.default_step.addWatchInput(b.path("src/shader.glsl"));
+    }
 
     const zmath_dep = b.dependency("zmath", .{
         .target = target,
         .optimize = optimize,
     });
 
-    // APP DynLib
-    const app = b.addSharedLibrary(.{
-        .name = "app",
-        .root_source_file = b.path("src/app/app.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    app.root_module.addImport("shader", shader_mod);
-    app.root_module.addImport("sokol", sokol_mod);
-    app.root_module.addImport("stdx", stdx_dep.module("stdx"));
-    app.root_module.addImport("zmath", zmath_dep.module("root"));
-
-    const app_dll_rel_path = app_path: {
-        if (target.result.os.tag.isDarwin()) {
-            break :app_path try std.fs.path.join(b.allocator, &.{ "..", "lib", app.out_filename });
-        } else {
-            break :app_path app.out_filename;
-        }
-    };
-    b.installArtifact(app);
-
-    const build_dll_step = b.step("build_dll", "Build the app dll");
-    build_dll_step.dependOn(&app.step);
+    if (is_dev_mode) {
+        // APP DynLib
+        const app = b.addSharedLibrary(.{
+            .name = "app",
+            .root_source_file = b.path("src/app/app.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const app_mod = app.root_module;
+        app_mod.addImport("shader", shader_mod);
+        app_mod.addImport("sokol", sokol_mod);
+        app_mod.addImport("stdx", stdx_dep.module("stdx"));
+        app_mod.addImport("zmath", zmath_dep.module("root"));
+        const app_dll_rel_path = app_path: {
+            if (target.result.os.tag.isDarwin()) {
+                break :app_path try std.fs.path.join(b.allocator, &.{ "..", "lib", app.out_filename });
+            } else {
+                break :app_path app.out_filename;
+            }
+        };
+        engine_options.addOption([]const u8, "app_dll_rel_path", app_dll_rel_path);
+        b.installArtifact(app);
+    }
 
     // ENGINE
     const exe_mod = b.createModule(.{
@@ -74,9 +80,11 @@ pub fn build(b: *std.Build) !void {
             .{ .name = "sokol", .module = sokol_mod },
         },
     });
+    if (!is_dev_mode) {
+        exe_mod.addImport("shader", shader_mod);
+        exe_mod.addImport("zmath", zmath_dep.module("root"));
+    }
 
-    const engine_options = b.addOptions();
-    engine_options.addOption([]const u8, "app_dll_rel_path", app_dll_rel_path);
     exe_mod.addOptions("build_options", engine_options);
 
     const exe = b.addExecutable(.{
@@ -92,7 +100,7 @@ pub fn build(b: *std.Build) !void {
         run_cmd.addArgs(args);
     }
     const run_step = b.step("run", "Run the app");
-    try run_step.addWatchInput(b.path("src/shader.glsl"));
+
     run_step.dependOn(&run_cmd.step);
 
     // TEST

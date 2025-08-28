@@ -88,3 +88,5 @@ export const api: API = .{
     .update = update,
     .cleanup = cleanup,
 };
+
+pub const api_zig = api;
