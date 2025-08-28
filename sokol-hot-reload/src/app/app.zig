@@ -42,7 +42,6 @@ fn createPipeline(state: *State) void {
 }
 
 pub fn reinit(state: *State) callconv(.C) void {
-    // TODO: delete the pipeline and recreate it
     sg.destroyPipeline(state.gfx.display.pipeline);
     createPipeline(state);
 }
