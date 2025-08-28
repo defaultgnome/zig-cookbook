@@ -8,50 +8,32 @@ const HotModule = @import("stdx").HotModule;
 const zmath = @import("zmath");
 const sokol = @import("sokol");
 const shaders = @import("shader");
-const sg = sokol.gfx;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 const slog = sokol.log;
 
-const GameState = @import("./game/game_api.zig").State;
-const GameAPI = @import("./game/game_api.zig").API;
-const GameHotModule = HotModule(GameAPI, "api");
+const AppState = @import("./app/app_api.zig").State;
+const AppAPI = @import("./app/app_api.zig").API;
+const AppHotModule = HotModule(AppAPI, "api");
 
-const EngineState = struct {
-    viewport: struct {
-        width: u32 = 1080,
-        height: u32 = 720,
-    } = .{},
-    gfx: struct {
-        pass_action: sg.PassAction = .{},
-        display: struct {
-            pipeline: sg.Pipeline = .{},
-            bindings: sg.Bindings = .{},
-        } = .{},
-        vbufs: struct {
-            quad: sg.Buffer = .{},
-        } = .{},
-    } = .{},
-};
-var engine_state: EngineState = EngineState{};
-/// Owned by the engine, passed to the game as a pointer
-var game_state: GameState = GameState{};
-var game_api: GameHotModule = undefined;
+/// Owned by the engine, passed to the app as a pointer
+var app_state: AppState = AppState{};
+var app_api: AppHotModule = undefined;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
     const allocator = gpa.allocator();
 
-    game_api = try GameHotModule.initFromExecutableDir(
+    app_api = try AppHotModule.initFromExecutableDir(
         allocator,
-        build_options.game_dll_rel_path,
+        build_options.app_dll_rel_path,
     );
-    defer game_api.deinit();
+    defer app_api.deinit();
 
-    try game_api.load();
-    defer game_api.unload() catch {
-        std.log.err("Failed to unload game dll - {s}", .{game_api.lib_path_working_copy orelse "null"});
+    try app_api.load();
+    defer app_api.unload() catch {
+        std.log.err("Failed to unload app dll - {s}", .{app_api.lib_path_working_copy orelse "null"});
     };
 
     sapp.run(.{
@@ -59,8 +41,8 @@ pub fn main() !void {
         .frame_cb = frame,
         .event_cb = input,
         .cleanup_cb = cleanup,
-        .width = @intCast(engine_state.viewport.width),
-        .height = @intCast(engine_state.viewport.height),
+        .width = @intCast(app_state.viewport.width),
+        .height = @intCast(app_state.viewport.height),
         .window_title = "sokol-hot-reloading-demo",
         .icon = .{
             .sokol_default = true,
@@ -70,84 +52,33 @@ pub fn main() !void {
 }
 
 export fn init() void {
-    // GAME
-    if (game_api.api) |api| {
-        api.init(&game_state);
-    }
-
-    // GRAPHICS
-    sg.setup(.{
-        .environment = sglue.environment(),
-        .logger = .{ .func = slog.func },
-    });
-
-    { // PASS ACTION
-        engine_state.gfx.pass_action.colors[0] = sg.ColorAttachmentAction{
-            .load_action = .CLEAR,
-            .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1.0 },
-        };
-    }
-    { // VBUFS
-        const quad_verts = [_]f32{ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 };
-        engine_state.gfx.vbufs.quad = sg.makeBuffer(.{
-            .data = sg.asRange(&quad_verts),
-        });
-        engine_state.gfx.display.bindings.vertex_buffers[0] = engine_state.gfx.vbufs.quad;
-    }
-
-    { // PIPELINE
-        var pip_desc: sg.PipelineDesc = .{
-            .shader = sg.makeShader(shaders.displayShaderDesc(sg.queryBackend())),
-            .primitive_type = .TRIANGLE_STRIP,
-        };
-        pip_desc.layout.attrs[shaders.ATTR_display_position].format = .FLOAT2;
-        engine_state.gfx.display.pipeline = sg.makePipeline(pip_desc);
+    if (app_api.api) |api| {
+        api.init(&app_state);
     }
 }
 
 export fn frame() void {
     if (IS_DEV) {
-        const has_reloaded = game_api.reload() catch false;
+        const has_reloaded = app_api.reload() catch false;
         if (has_reloaded) {
-            // TODO: trigger a reload game_api.reload - it should rebuild shaders etc..
-            std.log.debug("Reloaded game dll", .{});
+            if (app_api.api) |api| {
+                api.reinit(&app_state);
+            }
+            std.log.debug("Reloaded app dll", .{});
         }
     }
-    // UPDATE
-    if (game_api.api) |api| {
-        api.update(&game_state);
-        std.log.debug("Updated game state: {d}", .{game_state.data});
+
+    if (app_api.api) |api| {
+        api.update(&app_state);
     }
-
-    // DRAW
-    sg.beginPass(.{
-        .action = engine_state.gfx.pass_action,
-        .swapchain = sglue.swapchain(),
-    });
-
-    sg.applyPipeline(engine_state.gfx.display.pipeline);
-    sg.applyBindings(engine_state.gfx.display.bindings);
-
-    sg.applyViewport(
-        0,
-        0,
-        @intCast(engine_state.viewport.width),
-        @intCast(engine_state.viewport.height),
-        true,
-    );
-
-    sg.draw(0, 4, 1);
-
-    sg.endPass();
-    sg.commit();
 }
 
 export fn input(ev: ?*const sapp.Event) void {
     if (ev) |event| {
         switch (event.type) {
             .RESIZED => {
-                engine_state.viewport.width = @intCast(event.window_width);
-                engine_state.viewport.height = @intCast(event.window_height);
+                app_state.viewport.width = @intCast(event.window_width);
+                app_state.viewport.height = @intCast(event.window_height);
             },
             .KEY_DOWN => {
                 switch (event.key_code) {
@@ -163,5 +94,7 @@ export fn input(ev: ?*const sapp.Event) void {
 }
 
 export fn cleanup() void {
-    sg.shutdown();
+    if (app_api.api) |api| {
+        api.cleanup(&app_state);
+    }
 }
