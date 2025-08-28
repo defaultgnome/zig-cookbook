@@ -8,10 +8,11 @@ const slog = sokol.log;
 const sglue = sokol.glue;
 const shaders = @import("shader");
 
-pub fn init(state: *State) callconv(.C) void {
+pub fn init(state: *State) callconv(.c) void {
     sg.setup(.{
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
+        .shader_pool_size = 2,
     });
 
     { // PASS ACTION
@@ -41,12 +42,16 @@ fn createPipeline(state: *State) void {
     }
 }
 
-pub fn reinit(state: *State) callconv(.C) void {
+pub fn reinit(state: *State) callconv(.c) void {
     sg.destroyPipeline(state.gfx.display.pipeline);
+    state.gfx.display.pipeline = .{};
     createPipeline(state);
 }
 
-pub fn update(state: *State) callconv(.C) void {
+pub fn update(state: *State) callconv(.c) void {
+    if (state.gfx.display.pipeline.id == 0) {
+        return;
+    }
     // DRAW
     sg.beginPass(.{
         .action = state.gfx.pass_action,
@@ -75,7 +80,7 @@ pub fn update(state: *State) callconv(.C) void {
     sg.commit();
 }
 
-pub fn cleanup(state: *State) callconv(.C) void {
+pub fn cleanup(state: *State) callconv(.c) void {
     _ = state;
     sg.shutdown();
 }

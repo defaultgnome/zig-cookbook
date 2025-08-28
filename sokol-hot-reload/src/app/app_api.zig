@@ -19,8 +19,8 @@ pub const State = extern struct {
 };
 
 pub const API = extern struct {
-    init: *const fn (state: *State) callconv(.C) void,
-    reinit: *const fn (state: *State) callconv(.C) void,
-    update: *const fn (state: *State) callconv(.C) void,
-    cleanup: *const fn (state: *State) callconv(.C) void,
+    init: *const fn (state: *State) callconv(.c) void,
+    reinit: *const fn (state: *State) callconv(.c) void,
+    update: *const fn (state: *State) callconv(.c) void,
+    cleanup: *const fn (state: *State) callconv(.c) void,
 };

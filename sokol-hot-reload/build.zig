@@ -48,17 +48,21 @@ pub fn build(b: *std.Build) !void {
 
     if (is_dev_mode) {
         // APP DynLib
-        const app = b.addSharedLibrary(.{
+        const app = b.addLibrary(.{
             .name = "app",
-            .root_source_file = b.path("src/app/app.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/app/app.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "shader", .module = shader_mod },
+                    .{ .name = "sokol", .module = sokol_mod },
+                    .{ .name = "stdx", .module = stdx_dep.module("stdx") },
+                    .{ .name = "zmath", .module = zmath_dep.module("root") },
+                },
+            }),
+            .linkage = .dynamic,
         });
-        const app_mod = app.root_module;
-        app_mod.addImport("shader", shader_mod);
-        app_mod.addImport("sokol", sokol_mod);
-        app_mod.addImport("stdx", stdx_dep.module("stdx"));
-        app_mod.addImport("zmath", zmath_dep.module("root"));
         const app_dll_rel_path = app_path: {
             if (target.result.os.tag.isDarwin()) {
                 break :app_path try std.fs.path.join(b.allocator, &.{ "..", "lib", app.out_filename });

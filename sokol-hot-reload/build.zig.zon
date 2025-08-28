@@ -2,19 +2,19 @@
     .name = .sokol_hot_reload,
     .version = "0.0.0",
     .fingerprint = 0x8fcc1a37548ce49c,
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#f109b610b0ce11b44d88bea8936644928f13529d",
-            .hash = "sokol-0.1.0-pb1HK1WWLQAmA2QQnlB1z7ZUNJ4cIlI17WKdLQLCCbTc",
+            .url = "git+https://github.com/floooh/sokol-zig#64416d9093182728d5b7239d83adbec9d3e6282f",
+            .hash = "sokol-0.1.0-pb1HK1HTLQAsjVm5gHGpGI85Rwhwvu2KgCOTH-ZJ9sCS",
         },
         .zmath = .{
             .url = "git+https://github.com/zig-gamedev/zmath#05799b336d4eb315cd5a5e5693a5704ba01db36c",
             .hash = "zmath-0.11.0-dev-wjwivdErAwA9JvOksjectxgnDUZumDR1V9DwKy5UeTOT",
         },
         .stdx = .{
-            .url = "git+https://github.com/defaultgnome/stdx#641f77658b769e53cd5d6c64106381130bb71f49",
-            .hash = "stdx-0.1.1-1MzsKgg4AABfZQKVd31KYgcdetBi7x34e1iPiI8kJmai",
+            .url = "git+https://github.com/defaultgnome/stdx#619b87d961a6f29ab2f868cbe0449fa9ebc7436e",
+            .hash = "stdx-0.2.0-1MzsKmk5AACn8Z05D9nl-48YPrkQkRgsu3hD1pdpCjPk",
         },
     },
     .paths = .{
