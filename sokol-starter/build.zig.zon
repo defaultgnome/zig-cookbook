@@ -1,0 +1,21 @@
+.{
+    .name = .sokol_starter,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.15.1",
+    .fingerprint = 0xeaea841f5583e0eb,
+    .dependencies = .{
+        .sokol = .{
+            .url = "git+https://github.com/floooh/sokol-zig.git#a704439675e62e99e5df355a1c714e4f1d7b881e",
+            .hash = "sokol-0.1.0-pb1HK0JiLgC9KrHXqTwatj4FYLeMl1TFOngAFbnIBXYJ",
+        },
+        .zmath = .{
+            .url = "git+https://github.com/zig-gamedev/zmath#05799b336d4eb315cd5a5e5693a5704ba01db36c",
+            .hash = "zmath-0.11.0-dev-wjwivdErAwA9JvOksjectxgnDUZumDR1V9DwKy5UeTOT",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
